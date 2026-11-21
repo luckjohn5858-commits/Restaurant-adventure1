@@ -1,0 +1,44 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  export-android:
+    name: Export APK
+    runs-on: ubuntu-22.04
+    container:
+      image: barichello/godot-ci:4.3
+    env:
+      GODOT_VERSION: "4.3"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Godot, export templates and debug keystore
+        run: |
+          mkdir -v -p ~/.local/share/godot/export_templates/ ~/.config/godot/
+          mv /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          mv debug.keystore ~/debug.keystore
+          godot --headless --verbose --editor --quit
+          SETTINGS=~/.config/godot/editor_settings-${GODOT_VERSION}.tres
+          echo "export/android/android_sdk_path = \"/usr/lib/android-sdk\"" >> $SETTINGS
+          echo "export/android/debug_keystore = \"$HOME/debug.keystore\"" >> $SETTINGS
+          echo "export/android/debug_keystore_user = \"androiddebugkey\"" >> $SETTINGS
+          echo "export/android/debug_keystore_pass = \"android\"" >> $SETTINGS
+          echo "export/android/force_system_user = false" >> $SETTINGS
+          echo "export/android/shutdown_adb_on_exit = true" >> $SETTINGS
+
+      - name: Export APK
+        run: |
+          mkdir -v -p build
+          godot --headless --verbose --export-debug "Android" build/RestaurantAdventure.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestaurantAdventure-apk
+          path: build/RestaurantAdventure.apk
